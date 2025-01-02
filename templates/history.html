@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %}Audit History{% endblock %}
+
+{% block content %}
+<div class="container-fluid feature overflow-hidden py-5">
+    <div class="container py-5">
+        <div class="text-center mx-auto mb-5 wow fadeInUp" data-wow-delay="0.1s" style="max-width: 900px;">
+            <div class="history-container">
+                <h1 class="history-title">Audit History</h1>
+                <div class="table-wrapper">
+                    <table class="audit-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>URL</th>
+                                <th>Performance Score</th>
+                                <th>SEO Title</th>
+                                <th>SEO Meta Description</th>
+                                <th>Accessibility Issues</th>
+                                <th>Report</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for audit in audits %}
+                            <tr>
+                                <td>{{ audit.id }}</td>
+                                <td><a href="{{ audit.url }}" target="_blank">{{ audit.url }}</a></td>
+                                <td>{{ audit.performance_score }}</td>
+                                <td>{{ audit.seo_title }}</td>
+                                <td>{{ audit.seo_meta_description }}</td>
+                                <td>{{ audit.accessibility_issues }}</td>
+                                <td><a href="{{ report_url }}" class="download-btn" download>Download Report</a></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

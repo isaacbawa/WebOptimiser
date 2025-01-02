@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}Home - WebOptimizer{% endblock %}
+
+{% block content %}
+<div class="container-fluid feature overflow-hidden py-5">
+    <div class="container py-5">
+        <div class="text-center mx-auto mb-5 wow fadeInUp" data-wow-delay="0.1s" style="max-width: 900px;">
+            <center>
+                <h1>SEO Keyword Research Tool</h1>
+            </center>
+            <form class="audit-form" method="POST" action="/keywords">
+                <label class="lead" for="seed_keyword">Seed Keyword:</label>
+                <input type="text" id="seed_keyword" name="seed_keyword" required>
+                <button type="submit" class="btn btn-primary text-white py-2 px-4">Analyze</button>
+            </form>
+
+            {% if keyword_data %}
+            <div class="history-container">
+                <h1 class="history-title">SEO Keyword Search Results</h1>
+                <div class="table-wrapper">
+                    <table class="audit-table">
+                        <thead>
+                            <tr>
+                                <th>Keyword</th>
+                                <th>Search Volume</th>
+                                <th>Difficulty</th>
+                                <th>Trend</th>
+                                <th>Competitors</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in keyword_data %}
+                            <tr>
+                                <td>{{ row.keyword }}</td>
+                                <td>{{ row.search_volume }}</td>
+                                <td>{{ row.difficulty }}</td>
+                                <td>{{ row.average_trend }}</td>
+                                <td>{{ row.competitors }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <form method="POST" action="/keywords/export">
+                <input type="hidden" name="data" value="{{ keyword_data | tojson }}">
+                <button type="submit" class="btn btn-primary text-white py-2 px-4">Export as CSV</button>
+            </form>
+            {% endif %}
+
+            <script>
+                const data = JSON.stringify(keywordData); // Ensure `keywordData` is valid JSON
+                const formData = new FormData();
+                formData.append('data', data);
+
+                fetch('/keywords/export', {
+                    method: 'POST',
+                    body: formData
+                }).then(response => {
+                    if (response.ok) {
+                        return response.blob();
+                    }
+                    throw new Error('Export failed');
+                }).then(blob => {
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = url;
+                    a.download = 'keywords.csv';
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                }).catch(error => console.error('Error:', error));
+            </script>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
