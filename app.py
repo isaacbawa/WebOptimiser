@@ -1,7 +1,6 @@
 from flask import Flask, render_template, request, url_for, send_from_directory, send_file, jsonify
 from flask_sqlalchemy import SQLAlchemy
 import os
-import json
 import requests
 from bs4 import BeautifulSoup
 from fpdf import FPDF
@@ -10,16 +9,6 @@ import logging
 from urllib.parse import urlparse
 import time
 import logging
-import pandas as pd
-import io
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-import requests
-from bs4 import BeautifulSoup
-from pytrends.request import TrendReq
-import math
-
 
 
 app = Flask(__name__)
@@ -227,8 +216,7 @@ def audit_accessibility(url):
             "accessibility_issues": 0,  # Return 0 issues if the audit fails
         }
 
-
-# New pdf file code 28/12/2024
+# Generate PDF Report
 def generate_pdf_report(url, performance_metrics, seo_metrics, accessibility_metrics):
     domain_name = url.replace('https://', '').replace('http://', '').replace('www.', '').split('.')[0].capitalize()
     
@@ -294,10 +282,10 @@ def generate_pdf_report(url, performance_metrics, seo_metrics, accessibility_met
     pdf.cell(0, 10, "SEO Metrics:", ln=True)
     pdf.set_font("Times", size=12)
     # Add static text
-    pdf.multi_cell(0, 10, "SEO metrics are good in this era.")
-    for key, value in seo_metrics.items():
-        pdf.multi_cell(0, 10, f"{key.replace('_', ' ').title()}: {value}")
-    pdf.ln(5)
+    # pdf.multi_cell(0, 10, "SEO metrics are good in this era.")
+    # for key, value in seo_metrics.items():
+    #     pdf.multi_cell(0, 10, f"{key.replace('_', ' ').title()}: {value}")
+    # pdf.ln(5)
     
     # Add Accessibility Metrics
     pdf.set_font("Times", "B", 12)
@@ -320,54 +308,108 @@ def generate_pdf_report(url, performance_metrics, seo_metrics, accessibility_met
     
     return report_path
 
-
 @app.route('/')
 def index():
     return render_template('index.html')
 
-# new audit route
-@app.route('/audit', methods=['GET', 'POST'])
+# For EXTENSION Start
+def validate_url(url):
+    """Validate the URL format."""
+    return url.startswith("http://") or url.startswith("https://")
+
+@app.route('/audit', methods=['POST', 'GET'])
 def audit():
     if request.method == 'POST':
-        url = request.form.get('url')
-        if not url or not validate_url(url):
-            return render_template("audit.html", error="A valid URL is required")
-
-        # Perform audits
-        # Real-time performance metrics calculation (newly added logic)
         try:
+            # Check if the request is from the browser extension (JSON payload)
+            if request.is_json:
+                data = request.get_json()
+                url = data.get('url')
+                if not url or not validate_url(url):
+                    return jsonify({'error': 'Invalid URL provided.'}), 400
+                
+                # Call existing audit functions
+                performance_metrics = audit_performance(url)  # Function to audit performance
+                seo_metrics = audit_seo(url)  # Function to audit SEO
+                accessibility_metrics = audit_accessibility(url)  # Function to audit accessibility
+
+                # Generate the PDF report
+                report_path = generate_pdf_report(url, performance_metrics, seo_metrics, accessibility_metrics)
+
+                # Save the audit details to the database
+                audit_entry = AuditHistory(
+                    url=url,
+                    performance_score=performance_metrics.get("performance_score"),
+                    seo_title=seo_metrics.get("seo_title"),
+                    seo_meta_description=seo_metrics.get("seo_meta_description"),
+                    accessibility_issues=accessibility_metrics.get("accessibility_issues"),
+                    report_path=report_path
+                )
+                db.session.add(audit_entry)
+                db.session.commit()
+
+                # Return the results and report download link in JSON format
+                return jsonify({
+                    'url': url,
+                    'performance': performance_metrics,
+                    'seo': seo_metrics,
+                    'accessibility': accessibility_metrics,
+                    'report_download_link': url_for('download_report', filename=os.path.basename(report_path), _external=True)
+                })
+
+            # Handle form submission for web interface
+            url = request.form.get('url')
+            if not url or not validate_url(url):
+                return render_template('audit.html', error="Please provide a valid URL.")
+
+            # Perform audits (using existing functions)
             performance_metrics = audit_performance(url)
+            seo_metrics = audit_seo(url)
+            accessibility_metrics = audit_accessibility(url)
+
+            # Generate the PDF report
+            report_path = generate_pdf_report(url, performance_metrics, seo_metrics, accessibility_metrics)
+
+            # Save the audit to the database
+            audit_entry = AuditHistory(
+                url=url,
+                performance_score=performance_metrics.get("performance_score"),
+                seo_title=seo_metrics.get("seo_title"),
+                seo_meta_description=seo_metrics.get("seo_meta_description"),
+                accessibility_issues=accessibility_metrics.get("accessibility_issues"),
+                report_path=report_path
+            )
+            db.session.add(audit_entry)
+            db.session.commit()
+
+            # Render the web interface with results
+            return render_template(
+                'audit.html',
+                performance_metrics=performance_metrics,
+                seo_metrics=seo_metrics,
+                accessibility_metrics=accessibility_metrics,
+                report_url=url_for('download_report', filename=os.path.basename(report_path))
+            )
+
         except Exception as e:
-            return render_template("audit.html", error=f"Performance audit failed: {str(e)}")
+            if request.is_json:
+                return jsonify({'error': str(e)}), 500
+            return render_template('audit.html', error=f"Audit failed: {str(e)}")
 
-        # Existing SEO and accessibility metrics calculation
-        seo_metrics = audit_seo(url)
-        accessibility_metrics = audit_accessibility(url)
+    # Render the web form for GET requests
+    return render_template('audit.html')
 
-        # Generate PDF report
-        report_path = generate_pdf_report(url, performance_metrics, seo_metrics, accessibility_metrics)
 
-        # Save to database
-        audit_entry = AuditHistory(
-            url=url,
-            performance_score=performance_metrics["performance_score"],
-            seo_title=seo_metrics["seo_title"],
-            seo_meta_description=seo_metrics["seo_meta_description"],
-            accessibility_issues=accessibility_metrics["accessibility_issues"],
-            report_path=report_path
-        )
-        db.session.add(audit_entry)
-        db.session.commit()
+@app.route('/download/<path:filename>')
+def download_report(filename):
+    """Download the PDF report."""
+    try:
+        reports_dir = os.path.join(app.root_path, 'static', 'reports')  # Directory where PDF reports are stored
+        return send_from_directory(reports_dir, filename, as_attachment=True)
+    except FileNotFoundError:
+        return jsonify({'error': 'Report not found.'}), 404
 
-        return render_template(
-            "audit.html",
-            performance_metrics=performance_metrics,
-            seo_metrics=seo_metrics,
-            accessibility_metrics=accessibility_metrics,
-            report_url=url_for('download_report', filename=os.path.basename(report_path))
-        )
-
-    return render_template("audit.html")
+# For EXTENSION End
 
 
 @app.route('/history', methods=['GET'])
@@ -379,13 +421,12 @@ def history():
         get_report_url=lambda audit: url_for('download_report', filename=os.path.basename(audit.report_path))
     )
 
-
 # PDF Download
-@app.route('/download/<path:filename>')
-def download_report(filename):
-    """Serve the PDF report for download."""
-    directory = os.path.join(app.root_path, 'static', 'reports')  # Ensure the directory matches where PDFs are saved
-    return send_from_directory(directory, filename, as_attachment=True)
+# @app.route('/download/<path:filename>')
+# def download_report(filename):
+#     """Serve the PDF report for download."""
+#     directory = os.path.join(app.root_path, 'static', 'reports')  # Ensure the directory matches where PDFs are saved
+#     return send_from_directory(directory, filename, as_attachment=True)
 
 @app.route('/accessibility_check')
 def accessibility_check():
@@ -434,260 +475,6 @@ def metrics_glossary():
 def authentication_form():
     return render_template('authentication_form.html')
 
-
-#### SEO Keywords Start #####
-
-# Initialize PyTrends
-pytrends = TrendReq(timeout=(10, 25))  # Set higher timeouts
-
-@app.route('/keywords', methods=['GET', 'POST'])
-def keyword_research():
-    if request.method == 'POST':
-        seed_keyword = request.form.get('seed_keyword')
-        if not seed_keyword:
-            return render_template("keywords.html", error="Please provide a seed keyword.")
-        
-        # Discover related keywords
-        related_keywords = discover_related_keywords(seed_keyword)
-
-        # Analyze search volume
-        search_volume_data = analyze_search_volume(related_keywords)
-        search_volume_data = {key: round(value, 2) for key, value in search_volume_data.items()}
-
-
-        # Calculate keyword difficulty
-        keyword_difficulty_data = calculate_keyword_difficulty(related_keywords)
-
-        # Analyze trends
-        trend_data = analyze_trends(related_keywords)
-
-        # Analyze competitors
-        competitor_data = analyze_competitors(seed_keyword)
-
-        # Combine data
-        keyword_data = combine_keyword_data(
-            related_keywords,
-            search_volume_data,
-            keyword_difficulty_data,
-            trend_data,
-            competitor_data
-        )
-
-        return render_template("keywords.html", keyword_data=keyword_data)
-
-    return render_template("keywords.html")
-
-# Helper Function: Discover Related Keywords
-def discover_related_keywords(seed_keyword):
-    pytrends.build_payload([seed_keyword], cat=0, timeframe='today 12-m')
-    suggestions = pytrends.suggestions(keyword=seed_keyword)
-    return [suggestion['title'] for suggestion in suggestions]
-
-# Helper Function: Analyze Search Volume
-def analyze_search_volume(keywords):
-    search_volume = {}
-    for keyword in keywords:
-        try:
-            pytrends.build_payload([keyword], cat=0, timeframe='today 12-m')
-            data = pytrends.interest_over_time()
-            if not data.empty:
-                search_volume[keyword] = data[keyword].mean()
-            else:
-                search_volume[keyword] = 0
-        except Exception as e:
-            search_volume[keyword] = 0
-    return search_volume
-
-# Helper Function: Calculate Keyword Difficulty
-def calculate_keyword_difficulty(keywords):
-    """
-    Calculates the difficulty of keywords using real data for competition, trends, and volume.
-    """
-
-    # Initialize PyTrends
-    # pytrends = TrendReq(timeout=(10, 25))
-
-    # Subfunction: Fetch Google index count for competition
-    def fetch_google_index_count(keyword):
-        try:
-            url = f"https://www.google.com/search?q={keyword.replace(' ', '+')}"
-            headers = {"User-Agent": "Mozilla/5.0"}
-            response = requests.get(url, headers=headers)
-            soup = BeautifulSoup(response.text, 'html.parser')
-            result_stats = soup.find("div", id="result-stats")
-            if result_stats:
-                text = result_stats.text
-                count = int("".join(filter(str.isdigit, text.split()[1])))
-                return math.log10(count) if count > 0 else 0
-            return 0
-        except Exception as e:
-            print(f"Error fetching competition for {keyword}: {e}")
-            return 0
-
-    # Subfunction: Analyze trend score using PyTrends
-    def fetch_trend_score(keyword):
-        try:
-            pytrends.build_payload([keyword], cat=0, timeframe='today 12-m')
-            data = pytrends.interest_over_time()
-            if not data.empty:
-                return data[keyword].mean()
-            return 0
-        except Exception as e:
-            print(f"Error fetching trend score for {keyword}: {e}")
-            return 0
-
-    # Subfunction: Approximate search volume from Google search results (heuristic approach)
-    def approximate_search_volume(keyword):
-        try:
-            url = f"https://www.google.com/search?q={keyword.replace(' ', '+')}"
-            headers = {"User-Agent": "Mozilla/5.0"}
-            response = requests.get(url, headers=headers)
-            soup = BeautifulSoup(response.text, 'html.parser')
-            result_stats = soup.find("div", id="result-stats")
-            if result_stats:
-                text = result_stats.text
-                count = int("".join(filter(str.isdigit, text.split()[1])))
-                # Simplistic volume approximation based on search result count
-                return count // 1000
-            return 0
-        except Exception as e:
-            print(f"Error approximating search volume for {keyword}: {e}")
-            return 0
-
-    # Subfunction: Calculate difficulty score
-    def calculate_difficulty(competition, trend_score, search_volume):
-        # Custom scoring formula with weighted values
-        try:
-            if competition > 0 and trend_score > 0 and search_volume > 0:
-                difficulty_score = (
-                    (competition * 0.4) +
-                    (trend_score * 0.4) +
-                    (math.log10(search_volume) * 0.2)
-                )
-                return round(difficulty_score, 2)
-            return 0
-        except Exception as e:
-            print(f"Error calculating difficulty score: {e}")
-            return 0
-
-    # Main loop for keywords
-    difficulty = {}
-    for keyword in keywords:
-        print(f"Processing keyword: {keyword}")
-        competition = fetch_google_index_count(keyword)
-        trend_score = fetch_trend_score(keyword)
-        search_volume = approximate_search_volume(keyword)
-        difficulty[keyword] = calculate_difficulty(competition, trend_score, search_volume)
-
-    return difficulty
-
-
-# Helper Function: Analyze Trends
-def analyze_trends(keywords):
-    trends = {}
-    for keyword in keywords:
-        try:
-            pytrends.build_payload([keyword], cat=0, timeframe='today 12-m')
-            data = pytrends.interest_over_time()
-            if not data.empty:
-                trends[keyword] = data[keyword].tolist()
-            else:
-                trends[keyword] = [0] * 12
-        except Exception as e:
-            trends[keyword] = [0] * 12
-    return trends
-
-# Helper Function: Analyze Competitors
-def analyze_competitors(seed_keyword):
-    # Configure Selenium WebDriver
-    options = Options()
-    options.add_argument('--headless')  # Run browser in headless mode
-    options.add_argument('--disable-gpu')  # Disable GPU usage
-    options.add_argument('--no-sandbox')  # Bypass OS security model (for some environments)
-    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
-    driver = webdriver.Chrome(options=options)
-
-    try:
-        # Build the Google search URL
-        url = f"https://www.google.com/search?q={seed_keyword.replace(' ', '+')}"
-        driver.get(url)
-
-        # Wait for elements to load (adjust the timeout as needed)
-        driver.implicitly_wait(5)
-
-        # Find competitor elements
-        competitors = driver.find_elements(By.CSS_SELECTOR, 'h3')  # Update selector to match titles
-
-        # Extract competitor names (limit to top 3)
-        competitor_names = [comp.text for comp in competitors[:3] if comp.text.strip()]
-        
-        # Return results as a dictionary
-        return {
-            i + 1 : competitor_names[i] if i < len(competitor_names) else "N/A"
-            for i in range(3)
-        }
-
-    except Exception as e:
-        print(f"Error analyzing competitors: {e}")
-        return {i + 1 : "N/A" for i in range(3)}
-
-    finally:
-        driver.quit()
-
-# Combine Keyword Data
-def combine_keyword_data(related_keywords, search_volume_data, keyword_difficulty_data, trend_data, competitor_data):
-    data = []
-    for keyword in related_keywords:
-        trends = trend_data.get(keyword, [0] * 12)
-        avg_trend = sum(trends) / len(trends)
-        avg_trend = round(avg_trend, 2)
-        data.append({
-            "keyword": keyword,
-            "search_volume": search_volume_data.get(keyword, 0),
-            "difficulty": keyword_difficulty_data.get(keyword, 0),
-            "average_trend": avg_trend,
-            "competitors": competitor_data
-        })
-    return data
-
-
-@app.route('/keywords/export', methods=['POST'])
-def export_keywords():
-    try:
-        # Get the data from the form
-        data = request.form.get('data')
-
-        if not data:
-            return jsonify({"error": "No data provided"}), 400
-
-        # Validate JSON
-       
-        try:
-            parsed_data = json.loads(data)  # Validate JSON string
-        except json.JSONDecodeError:
-            return jsonify({"error": "Invalid JSON format"}), 400
-
-        # Convert JSON to DataFrame
-        df = pd.DataFrame(parsed_data)
-
-        # Export to CSV
-        output = io.BytesIO()
-        df.to_csv(output, index=False)
-        output.seek(0)
-
-        return send_file(
-            output,
-            as_attachment=True,
-            download_name="keywords.csv",
-            mimetype='text/csv'
-        )
-    except Exception as e:
-        # Log the error for debugging
-        app.logger.error(f"Error in export_keywords: {e}")
-        return jsonify({"error": "An error occurred while exporting data"}), 500
-
-
-#### SEO Keywords End #####
 
 if __name__ == '__main__':
     # Initialize database
