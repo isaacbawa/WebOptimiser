@@ -283,9 +283,9 @@ def generate_pdf_report(url, performance_metrics, seo_metrics, accessibility_met
     pdf.set_font("Times", size=12)
     # Add static text
     # pdf.multi_cell(0, 10, "SEO metrics are good in this era.")
-    # for key, value in seo_metrics.items():
-    #     pdf.multi_cell(0, 10, f"{key.replace('_', ' ').title()}: {value}")
-    # pdf.ln(5)
+    for key, value in seo_metrics.items():
+        pdf.multi_cell(0, 10, f"{key.replace('_', ' ').title()}: {value}")
+    pdf.ln(5)
     
     # Add Accessibility Metrics
     pdf.set_font("Times", "B", 12)
