@@ -115,9 +115,9 @@ def audit_performance(url):
 
         # Final metrics
         result = {
+            "performance_score": performance_score, 
             "status_code": response.status_code,
             "content_size": f"{content_size / 1024:.2f} KB",  # Convert to KB
-            "performance_score": performance_score,
             "first_contentful_paint": f"{first_contentful_paint:.2f} seconds",
             "speed_index": f"{speed_index:.2f} seconds",
             "largest_contentful_paint": f"{largest_contentful_paint:.2f} seconds",
@@ -231,7 +231,7 @@ def generate_pdf_report(url, performance_metrics, seo_metrics, accessibility_met
                 # Add metrics glory inf
                 self.set_text_color(0, 0, 255)  # Set text color to blue for the hyperlink
                 self.set_font("Times", "B", 14)  # Underline the hyperlink
-                self.cell(0, 10, "Click me for the meanings of the metrics in this report", border=0, ln=1, align="C", link="http://127.0.0.1:5000/metrics_glossary")
+                self.cell(0, 10, "Click me for the meanings of the metrics in this report", border=0, ln=1, align="C", link="https://weboptimizer.onrender.com/metrics_glossary")
                 self.ln(5)
 
         # Footer for each page
@@ -251,7 +251,7 @@ def generate_pdf_report(url, performance_metrics, seo_metrics, accessibility_met
 
             # Add the clickable link for "WebOptimizer" and page number
             self.set_text_color(0, 0, 255)  # Set text color to blue for the hyperlink
-            self.cell(self.get_string_width(weboptimizer), 10, weboptimizer, link="http://127.0.0.1:5000/audit")
+            self.cell(self.get_string_width(weboptimizer), 10, weboptimizer, link="https://weboptimizer.onrender.com")
     
             self.set_text_color(0, 0, 0)  # Reset text color to black
             self.cell(self.get_string_width(f" | Page {self.page_no()}"), 10, f" | Page {self.page_no()}", ln=0)
