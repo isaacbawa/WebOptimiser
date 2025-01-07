@@ -295,10 +295,12 @@ def generate_pdf_report(url, performance_metrics, seo_metrics, accessibility_met
         pdf.multi_cell(0, 10, f"{key.replace('_', ' ').title()}: {value}")
     pdf.ln(5)
 
-    # Add metrics glory inf
-    pdf.set_text_color(0, 0, 255)  # Set text color to blue for the hyperlink
-    pdf.set_font("Times", "B", 14)  # Underline the hyperlink
-    pdf.cell(0, 10, "Click me for the meanings of the metrics in this report.", border=0, ln=1, link="http://127.0.0.1:5000/metrics_glossary")
+    # Add Feedback Form
+    pdf.set_text_color(0, 100, 0)  # Green color
+    pdf.set_font("Times", "B", 14)  # Bold, size 14
+    pdf.cell(0, 10, "Your Opinion Matters!", border=0, ln=1, align="C", link="https://2supa0q0cir.typeform.com/to/GBRu9wyK")
+    pdf.set_font("Times", "B", 12)  # Bold, size 12
+    pdf.cell(0, 10, "Consider giving us feedback on your experience using WebOptimizer.", border=0, ln=1, align="C", link="https://2supa0q0cir.typeform.com/to/GBRu9wyK")
     pdf.ln(5)
     
     # Save the PDF
